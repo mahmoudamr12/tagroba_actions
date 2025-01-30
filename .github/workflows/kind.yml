@@ -1,16 +1,23 @@
 name: CI with Kind
-on: [push, pull_request]
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
 
 jobs:
   test:
     runs-on: ubuntu-latest  # GitHub-hosted runner
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Kubernetes (Kind)
         uses: helm/kind-action@v1.8.0  # This starts a Kind cluster
-      
+
       - name: Check cluster info
         run: kubectl cluster-info
 
@@ -19,7 +26,6 @@ jobs:
           kubectl apply -f deployment.yaml
           kubectl apply -f service.yaml
           kubectl get pods -A
-          kubectl get svc 
 
       - name: Run tests
         run: |
