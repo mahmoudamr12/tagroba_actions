@@ -1,0 +1,27 @@
+name: CI with Kind
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest  # GitHub-hosted runner
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Kubernetes (Kind)
+        uses: helm/kind-action@v1.8.0  # This starts a Kind cluster
+      
+      - name: Check cluster info
+        run: kubectl cluster-info
+
+      - name: Deploy to Kind
+        run: |
+          kubectl apply -f deployment.yaml
+          kubectl apply -f service.yaml
+          kubectl get pods -A
+          kubectl get svc 
+
+      - name: Run tests
+        run: |
+          kubectl wait --for=condition=ready pod -l app=my-app -n default --timeout=60s
+          kubectl logs deployment/my-app
