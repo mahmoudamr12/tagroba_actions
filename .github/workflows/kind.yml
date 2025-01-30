@@ -4,11 +4,11 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:  # Allows manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   build-and-push:
-    runs-on: self-hosted  # Use self-hosted runner
+    runs-on: self-hosted
 
     steps:
       - name: Checkout Code
@@ -28,36 +28,47 @@ jobs:
           docker push mahmoudamr/jenkins_image02:${{ github.sha }}
 
   deploy:
-    runs-on: self-hosted  # Use self-hosted runner
+    runs-on: self-hosted
     needs: build-and-push
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Verify kubectl Installation
-        run: kubectl version --client || { echo "kubectl not installed!"; exit 1; }
-
-      - name: Set up kubectl
+      - name: Install Kind (if not installed)
         run: |
-          echo "${{ secrets.KUBECONFIG }}" | base64 --decode > kubeconfig
-          export KUBECONFIG=$(pwd)/kubeconfig
-          kubectl config use-context kind-kind  # Ensure using the Kind cluster
-          kubectl version --client
-          kubectl get nodes  # Verify cluster is running
+          if ! command -v kind &> /dev/null; then
+            echo "Installing Kind..."
+            curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
+            chmod +x ./kind
+            sudo mv ./kind /usr/local/bin/kind
+          fi
+
+      - name: Create Kind Cluster
+        run: |
+          if ! kind get clusters | grep -q "my-cluster"; then
+            kind create cluster --name my-cluster
+          else
+            echo "Cluster already exists, skipping creation."
+          fi
+
+      - name: Verify Kubernetes Setup
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
 
       - name: Deploy to Kubernetes
         run: |
           kubectl apply -f deployment.yaml
           kubectl apply -f service.yaml
 
+      - name: Wait for Pods to be Ready
+        run: kubectl rollout status deployment/my-app -n default --timeout=120s
+
       - name: Verify Deployment
         run: kubectl get pods,services -n default
 
-      - name: Wait for Pods to be Ready
+      - name: Test Service Connection
         run: |
-          kubectl rollout status deployment/my-app -n default --timeout=120s
-
-      - name: Test Service Connection (Self-Hosted Runner)
-        run: |
+          sleep 5  # Give time for service to start
           curl http://localhost:31019 || { echo "Service unreachable!"; exit 1; }
